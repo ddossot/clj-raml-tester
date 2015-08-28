@@ -1,0 +1,27 @@
+#%RAML 0.8
+---
+title: test-api
+baseUri: ${baseUri}
+version: v1
+
+mediaType: application/json
+
+schemas:
+  - fruit: !include fruit.json
+  - new-fruit: !include new-fruit.json
+
+/fruit:
+  get:
+    responses:
+      200:
+        body:
+          schema: fruit
+
+/fruits:
+  post:
+    body:
+      schema: new-fruit
+    responses:
+      201:
+        body:
+          schema: fruit
