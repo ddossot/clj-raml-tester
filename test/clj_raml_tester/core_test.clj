@@ -53,18 +53,12 @@
 
 (use-fixtures :once with-test-api)
 
-(defn resource->absolute-url
-  [rsc]
-  (str "file://"
-       (io/file
-         (io/resource rsc))))
-
 (defn start-proxy
   []
   (crt/start-proxy
     raml-tester-proxy-port
     (test-api-url)
-    (resource->absolute-url "test-api.raml")))
+    (io/resource "test-api.raml")))
 
 (deftest no-api-hit
   (with-open [rtp (start-proxy)]

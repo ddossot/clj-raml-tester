@@ -9,6 +9,7 @@
                                       ServerOptions
                                       ValidatorConfigurator]
              guru.nidi.ramlproxy.report.ReportSaver
+             java.io.File
             [java.net URI URL]))
 
 (defprotocol RamlTesterProxy
@@ -44,12 +45,38 @@
   (close [this]
     (.close proxy)))
 
-(defn- url-ish?
+(defn- trim-left-slashes
+  [s]
+  (second
+    (re-matches #"^/*([^/]+.*)$" s)))
+
+(defmulti ^:private ^URI urlish->str
+  (fn [v] [(class v)]))
+
+(defmethod ^:private urlish->str [String] [v]
+  v)
+
+(defmethod ^:private urlish->str [File] [^File v]
+  (urlish->str (.toURI v)))
+
+(defmethod ^:private urlish->str [URL] [^URL v]
+  (urlish->str (.toURI v)))
+
+(defmethod ^:private urlish->str [URI] [^URI v]
+  (case (.getScheme v)
+    ;; raml-tester likes its file URLs triple-slashed
+    "file" (str "file:///"
+                (trim-left-slashes
+                  (.getSchemeSpecificPart v)))
+    (str v)))
+
+(defn- urlish?
   [v]
   (or
     (string? v)
     (instance? URI v)
-    (instance? URL v)))
+    (instance? URL v)
+    (instance? File v)))
 
 (defn start-proxy
   "TODO document"
@@ -58,18 +85,18 @@
       :or {base-uri target-url
            ignore-x-headers true}}]
   {:pre [(pos? port)
-         (url-ish? target-url)
-         (url-ish? raml-url)
-         (url-ish? base-uri)
+         (urlish? target-url)
+         (urlish? raml-url)
+         (urlish? base-uri)
          (instance? Boolean ignore-x-headers)]
    :post [(satisfies? RamlTesterProxy %)]}
 
   (let [server-options (ServerOptions.
                          port
-                         (str target-url)
+                         (urlish->str target-url)
                          nil              ; mock-dir
-                         (str raml-url)
-                         (str base-uri)
+                         (urlish->str raml-url)
+                         (urlish->str base-uri)
                          nil              ; save-dir
                          nil              ; file-format
                          ignore-x-headers
