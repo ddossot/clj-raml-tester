@@ -12,8 +12,10 @@
                              [codox "0.8.13"]]
                    :dependencies [[clj-http "2.0.0"]
                                   [ring/ring-jetty-adapter "1.4.0"]
-                                  [compojure "1.4.0"]
                                   [ring/ring-json "0.4.0"]
+                                  [ring/ring-defaults "0.1.5"]
+                                  [ring.middleware.conditional "0.2.0"]
+                                  [compojure "1.4.0"]
                                   [freeport "1.0.0"]]
                    :resource-paths ["test-resources"]}}
 
