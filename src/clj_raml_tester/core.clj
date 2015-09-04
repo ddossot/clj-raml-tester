@@ -43,7 +43,8 @@
       (proxy->aggregator proxy)
       (raml-definition this)))
   (close [this]
-    (.close proxy)))
+    (.close proxy)
+    (.waitForServer proxy)))
 
 (defn- trim-left-slashes
   [s]
@@ -109,29 +110,10 @@
       (throw (IllegalArgumentException.
                (str "The RAML file has validation errors: \n"
                     (str/join "\n" raml-violations)))))
-    (RamlProxy/prestartServer port)
     (RamlTesterProxyRecord.
       (RamlProxy/startServerSync
         server-options
         (ReportSaver. (MultiReportAggregator.))))))
-
-(defn- entries->map
-  [entries]
-  (reduce
-    (fn -entry-set-reductor
-      [acc entry]
-      (assoc
-        acc
-        (.getKey entry)
-        (.getValue entry)))
-    {}
-    entries))
-
-(defn- usage->unused-resources
-  [^Usage usage]
-  (set
-    (when usage
-      (.getUnusedResources usage))))
 
 (defmacro ^:private update-violations
   [violations type getter raml-report]
@@ -168,8 +150,13 @@
   (let [usage (usage proxy-rec)]
     (merge
       (raml-reports->violations (reports proxy-rec))
-      {:unused (entries->map usage)
-       :unused-resources (usage->unused-resources usage)})))
+      {:unused-resources (set (.getUnusedResources usage))
+       :unused-actions (set (.getUnusedActions usage))
+       :unused-form-parameter (set (.getUnusedFormParameters usage))
+       :unused-query-parameters (set (.getUnusedQueryParameters usage))
+       :unused-request-headers (set (.getUnusedRequestHeaders usage))
+       :unused-response-headers (set (.getUnusedResponseHeaders usage))
+       :unused-response-codes (set (.getUnusedResponseCodes usage))})))
 
 (defn proxy->test-report
   "TODO doc"
@@ -181,5 +168,4 @@
    :post [(map? %)]}
   (let [rsus (proxy->reports-and-usages proxy-rec)]
     ;; TODO implement me!
-    ;; NOTE render textual violations with pr-str
     nil))

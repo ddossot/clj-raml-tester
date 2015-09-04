@@ -13,6 +13,12 @@
             [compojure.route :as route]
             [freeport.core :refer [get-free-port!]]))
 
+(def debug
+  (read-string
+    (System/getProperty
+      "clj-raml-tester.debug"
+      "false")))
+
 (def test-api-port
   (Integer/valueOf
     (System/getProperty
@@ -91,20 +97,75 @@
   (start-proxy
     (test-api-url "/test-api.raml")))
 
-(defn no-api-hit-assertions
+(defn log-debug
+  [msg]
+  (when debug
+    (println
+      "\n" (testing-contexts-str) "----\n"
+      msg "\n")))
+
+(defn proxy-results
   [rtp]
   (let [rsus (crt/proxy->reports-and-usages rtp)]
-    (are [coll expected] (= (count coll) expected)
-         (:unused-resources rsus)      2
-         (:unused rsus)                2
-         (:request-violations rsus)    0
-         (:response-violations rsus)   0
-         (:validation-violations rsus) 0)))
+    (log-debug rsus)
+    rsus))
 
-(deftest no-api-hit
-  (testing "with RAML file"
-    (with-open [rtp (start-proxy-with-raml-file)]
-      (no-api-hit-assertions rtp)))
-  (testing "with RAML HTTP"
-    (with-open [rtp (start-proxy-with-raml-http)]
-      (no-api-hit-assertions rtp))))
+(defn no-api-coverage-assertions
+  [rtp]
+  (let [results (proxy-results rtp)]
+    (are [coll expected] (= (count coll) expected)
+         (:unused-resources results)        2
+         (:unused-actions results)          2
+         (:unused-form-parameter results)   0
+         (:unused-query-parameters results) 0
+         (:unused-request-headers results)  0
+         (:unused-response-headers results) 0
+         (:unused-response-codes results)   2
+         (:request-violations results)      0
+         (:response-violations results)     0
+         (:validation-violations results)   0)))
+
+(deftest no-api-coverage
+  (testing "no API coverage"
+    (testing "with RAML file"
+      (with-open [rtp (start-proxy-with-raml-file)]
+        (no-api-coverage-assertions rtp)))
+    (testing "with RAML HTTP"
+      (with-open [rtp (start-proxy-with-raml-http)]
+        (no-api-coverage-assertions rtp)))))
+
+(defn partial-api-tests
+  []
+  (let [resp (http/get (test-proxy-url "/fruit"))]
+    (log-debug resp)
+    (is (= (:status resp) 200))))
+
+(defn partial-api-coverage-assertions
+  [rtp]
+  (let [results (proxy-results rtp)]
+    (are [coll expected] (= (count coll) expected)
+         (:unused-resources results)        1
+         (:unused-actions results)          1
+         (:unused-form-parameter results)   0
+         (:unused-query-parameters results) 0
+         (:unused-request-headers results)  0
+         (:unused-response-headers results) 0
+         (:unused-response-codes results)   1
+         (:request-violations results)      0
+         (:response-violations results)     0
+         (:validation-violations results)   0)))
+
+; FIXME assertion fails as if usage is not correctly captured
+;       I suspect something is not flushed correctly inside raml-tester
+;       prior to performing the usage assertion
+
+;(deftest partial-api-coverage
+;  (testing "partial API coverage"
+;    (testing "with RAML file"
+;      (with-open [rtp (start-proxy-with-raml-file)]
+;        (partial-api-tests)
+;        (partial-api-coverage-assertions rtp)))
+;    (testing "with RAML HTTP"
+;      (with-open [rtp (start-proxy-with-raml-http)]
+;        (partial-api-tests)
+;        (partial-api-coverage-assertions rtp)))))

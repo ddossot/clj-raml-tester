@@ -7,6 +7,9 @@
 
   :java-source-paths ["java-src"]
 
+  ; set to true to have verbose debug of integration tests
+  :jvm-opts ["-Dclj-raml-tester.debug=false"]
+
   :profiles {:dev {:plugins [[lein-kibit "0.1.2"]
                              [jonase/eastwood "0.2.1"]
                              [codox "0.8.13"]]
@@ -20,4 +23,6 @@
                    :resource-paths ["test-resources"]}}
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [guru.nidi.raml/raml-tester-client "0.8.4"]])
+                 [guru.nidi.raml/raml-tester-client "0.8.4"
+                  :exclusions [com.fasterxml.jackson.core/jackson-databind]]
+                 [com.fasterxml.jackson.core/jackson-databind "2.4.4"]])
