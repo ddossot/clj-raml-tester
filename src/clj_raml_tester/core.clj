@@ -3,11 +3,12 @@
             [clojure.string :as str])
   (:import   clj_raml_tester.Util
              guru.nidi.ramltester.MultiReportAggregator
+             guru.nidi.ramltester.RamlDefinition
              guru.nidi.ramltester.core.Usage
-             guru.nidi.ramlproxy.RamlProxy
             [guru.nidi.ramlproxy.core RamlProxyServer
                                       ServerOptions
                                       ValidatorConfigurator]
+             guru.nidi.ramlproxy.jetty.JettyRamlProxyServer
              guru.nidi.ramlproxy.report.ReportSaver
              java.io.File
             [java.net URI URL]))
@@ -19,29 +20,24 @@
   (reports [this])
   (close [this]))
 
-(def ^:private proxy->raml-definition
-  (memoize
-    (fn -proxy->raml-definition
-      [^RamlProxyServer proxy]
-      (.fetchRamlDefinition proxy))))
-
 (defn- proxy->aggregator
   [^RamlProxyServer proxy]
   (.. proxy getSaver getAggregator))
 
 (defrecord ^:private RamlTesterProxyRecord
-  [^RamlProxyServer proxy]
+  [^JettyRamlProxyServer proxy
+   ^RamlDefinition raml-definition]
   RamlTesterProxy
   (raml-definition [this]
-    (proxy->raml-definition proxy))
+    raml-definition)
   (usage [this]
     (.getUsage
       (proxy->aggregator proxy)
-      (raml-definition this)))
+      raml-definition))
   (reports [this]
     (.getReports
       (proxy->aggregator proxy)
-      (raml-definition this)))
+      raml-definition))
   (close [this]
     (.close proxy)
     (.waitForServer proxy)))
@@ -79,6 +75,14 @@
     (instance? URL v)
     (instance? File v)))
 
+(defn- validate-raml
+  [server-options raml-definition]
+  (-> (.validateRaml
+        server-options
+        raml-definition)
+    .getValidationViolations
+    .asList))
+
 (defn start-proxy
   "TODO document"
   [port target-url raml-url
@@ -105,15 +109,20 @@
                          0                ; min-delay
                          0                ; max-delay
                          ValidatorConfigurator/NONE)
-        raml-violations (Util/validateServerOptions server-options)]
+        raml-definition (Util/fetchRamlDefinition server-options)
+        raml-violations (validate-raml
+                          server-options
+                          raml-definition)]
     (if-not (empty? raml-violations)
       (throw (IllegalArgumentException.
                (str "The RAML file has validation errors: \n"
                     (str/join "\n" raml-violations)))))
     (RamlTesterProxyRecord.
-      (RamlProxy/startServerSync
+      (JettyRamlProxyServer.
         server-options
-        (ReportSaver. (MultiReportAggregator.))))))
+        (ReportSaver. (MultiReportAggregator.))
+        raml-definition)
+      raml-definition)))
 
 (defmacro ^:private update-violations
   [violations type getter raml-report]

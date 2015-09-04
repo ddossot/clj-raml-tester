@@ -136,7 +136,8 @@
 
 (defn partial-api-tests
   []
-  (let [resp (http/get (test-proxy-url "/fruit"))]
+  (let [resp (http/get (test-proxy-url "/fruit")
+                       {:as :json})]
     (log-debug resp)
     (is (= (:status resp) 200))))
 
@@ -155,17 +156,25 @@
          (:response-violations results)     0
          (:validation-violations results)   0)))
 
-; FIXME assertion fails as if usage is not correctly captured
-;       I suspect something is not flushed correctly inside raml-tester
-;       prior to performing the usage assertion
-
-;(deftest partial-api-coverage
-;  (testing "partial API coverage"
-;    (testing "with RAML file"
-;      (with-open [rtp (start-proxy-with-raml-file)]
-;        (partial-api-tests)
-;        (partial-api-coverage-assertions rtp)))
-;    (testing "with RAML HTTP"
-;      (with-open [rtp (start-proxy-with-raml-http)]
-;        (partial-api-tests)
-;        (partial-api-coverage-assertions rtp)))))
+(deftest partial-api-coverage
+  (testing "partial API coverage"
+    (testing "with RAML file"
+      (with-open [rtp (start-proxy-with-raml-file)]
+        (partial-api-tests)
+        ;;
+        ;; FIXME remove these sleeps by resolving the race-condition
+        ;; between TesterFilter/test calling saver.addReport
+        ;; and crt/proxy->reports-and-usages.
+        ;;
+        ;; NOTE manually closing rtp before the assertions
+        ;; doesn't help because Jetty is not configured with
+        ;; a stop timeout, thus current requests aren't drained
+        ;; while the call to .close has returned.
+        ;;
+        (java.lang.Thread/sleep 500)
+        (partial-api-coverage-assertions rtp)))
+    (testing "with RAML HTTP"
+      (with-open [rtp (start-proxy-with-raml-http)]
+        (partial-api-tests)
+        (java.lang.Thread/sleep 500)
+        (partial-api-coverage-assertions rtp)))))
