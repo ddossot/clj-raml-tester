@@ -83,6 +83,25 @@
     .getValidationViolations
     .asList))
 
+(defn- throw-raml-violations
+  [raml-violations]
+  (throw
+    (IllegalArgumentException.
+      (str "The RAML file has validation errors: \n"
+           (str/join "\n" raml-violations)))))
+
+(defn- load-and-validate-raml
+  [server-options]
+  (let [raml-definition (Util/fetchRamlDefinition
+                          server-options)
+        raml-violations (validate-raml
+                          server-options
+                          raml-definition)]
+    (if (empty? raml-violations)
+      raml-definition
+      (throw-raml-violations
+        raml-violations))))
+
 (defn start-proxy
   "TODO document"
   [port target-url raml-url
@@ -109,14 +128,8 @@
                          0                ; min-delay
                          0                ; max-delay
                          ValidatorConfigurator/NONE)
-        raml-definition (Util/fetchRamlDefinition server-options)
-        raml-violations (validate-raml
-                          server-options
-                          raml-definition)]
-    (if-not (empty? raml-violations)
-      (throw (IllegalArgumentException.
-               (str "The RAML file has validation errors: \n"
-                    (str/join "\n" raml-violations)))))
+        raml-definition (load-and-validate-raml
+                          server-options)]
     (RamlTesterProxyRecord.
       (JettyRamlProxyServer.
         server-options
