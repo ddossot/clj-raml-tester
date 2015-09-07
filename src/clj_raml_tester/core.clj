@@ -102,7 +102,7 @@
       (throw-raml-violations
         raml-violations))))
 
-(defn start-proxy
+(defn start-raml-tester-proxy
   "TODO document"
   [port target-url raml-url
    & {:keys [base-uri ignore-x-headers]
@@ -133,7 +133,8 @@
     (RamlTesterProxyRecord.
       (JettyRamlProxyServer.
         server-options
-        (ReportSaver. (MultiReportAggregator.))
+        (ReportSaver.
+          (MultiReportAggregator.))
         raml-definition)
       raml-definition)))
 
@@ -165,22 +166,58 @@
      :validation-violations #{}}
     raml-reports))
 
-(defn proxy->reports-and-usages
-  "TODO doc"
-  [proxy-rec]
-  {:pre [(satisfies? RamlTesterProxy proxy-rec)]}
-  (let [usage (usage proxy-rec)]
-    (merge
-      (raml-reports->violations (reports proxy-rec))
-      {:unused-resources (set (.getUnusedResources usage))
-       :unused-actions (set (.getUnusedActions usage))
-       :unused-form-parameter (set (.getUnusedFormParameters usage))
-       :unused-query-parameters (set (.getUnusedQueryParameters usage))
-       :unused-request-headers (set (.getUnusedRequestHeaders usage))
-       :unused-response-headers (set (.getUnusedResponseHeaders usage))
-       :unused-response-codes (set (.getUnusedResponseCodes usage))})))
+(defonce ^:private default-requests-wait-time-millis 3000)
+(defonce ^:private request-wait-sleep-time-millis 10)
 
-(defn proxy->test-report
+(defn wait-n-requests
+  "Wait for n test requests to be captured by the proxy."
+  ([proxy-rec n]
+    (wait-n-requests
+      proxy-rec
+      n
+      default-requests-wait-time-millis))
+  ([proxy-rec n max-wait-millis]
+    {:pre [(satisfies? RamlTesterProxy proxy-rec)
+           (pos? n)
+           (pos? max-wait-millis)]}
+    (loop [attempts-left (/ max-wait-millis
+                            request-wait-sleep-time-millis)]
+      (when
+        (< (count (reports proxy-rec)) n)
+        (Thread/sleep
+          request-wait-sleep-time-millis)
+        (recur (dec attempts-left))))))
+
+(defrecord RamlTesterResults
+  [request-violations
+   response-violations
+   validation-violations
+   unused-resources
+   unused-actions
+   unused-form-parameter
+   unused-query-parameters
+   unused-request-headers
+   unused-response-headers
+   unused-response-codes])
+
+(defn raml-tester-results
+  "Get the currently captured tester results."
+  [proxy-rec]
+  {:pre [(satisfies? RamlTesterProxy proxy-rec)]
+   :post [(instance? RamlTesterResults %)]}
+  (let [usage (usage proxy-rec)]
+    (map->RamlTesterResults
+      (merge
+        (raml-reports->violations (reports proxy-rec))
+        {:unused-resources (set (.getUnusedResources usage))
+         :unused-actions (set (.getUnusedActions usage))
+         :unused-form-parameter (set (.getUnusedFormParameters usage))
+         :unused-query-parameters (set (.getUnusedQueryParameters usage))
+         :unused-request-headers (set (.getUnusedRequestHeaders usage))
+         :unused-response-headers (set (.getUnusedResponseHeaders usage))
+         :unused-response-codes (set (.getUnusedResponseCodes usage))}))))
+
+(defn test-report
   "TODO doc"
   [proxy-rec
    & {:keys [ignore-request-violations]
@@ -188,6 +225,6 @@
   {:pre [(satisfies? RamlTesterProxy proxy-rec)
          (instance? Boolean ignore-request-violations)]
    :post [(map? %)]}
-  (let [rsus (proxy->reports-and-usages proxy-rec)]
-    ;; TODO implement me!
+  (let [results (raml-tester-results proxy-rec)]
+    ;; FIXME implement me!
     nil))

@@ -1,7 +1,7 @@
 (ns clj-raml-tester.core-test
   (:require [clojure.test :refer :all]
             [clojure.java.io :as io]
-            [clj-raml-tester.core :as crt]
+            [clj-raml-tester.core :refer :all]
             [clj-http.client :as http]
             [ring.adapter.jetty :refer [run-jetty]]
             [ring.util.response :refer [response created]]
@@ -82,7 +82,7 @@
 
 (defn start-proxy
   [raml-url]
-  (crt/start-proxy
+  (start-raml-tester-proxy
     raml-tester-proxy-port
     (test-api-url)
     raml-url))
@@ -106,9 +106,9 @@
 
 (defn proxy-results
   [rtp]
-  (let [rsus (crt/proxy->reports-and-usages rtp)]
-    (log-debug rsus)
-    rsus))
+  (let [results (raml-tester-results rtp)]
+    (log-debug results)
+    results))
 
 (defn no-api-coverage-assertions
   [rtp]
@@ -161,20 +161,14 @@
     (testing "with RAML file"
       (with-open [rtp (start-proxy-with-raml-file)]
         (partial-api-tests)
-        ;;
-        ;; FIXME remove these sleeps by resolving the race-condition
-        ;; between TesterFilter/test calling saver.addReport
-        ;; and crt/proxy->reports-and-usages.
-        ;;
-        ;; NOTE manually closing rtp before the assertions
-        ;; doesn't help because Jetty is not configured with
-        ;; a stop timeout, thus current requests aren't drained
-        ;; while the call to .close has returned.
-        ;;
-        (java.lang.Thread/sleep 500)
+        (wait-n-requests rtp 1)
         (partial-api-coverage-assertions rtp)))
     (testing "with RAML HTTP"
       (with-open [rtp (start-proxy-with-raml-http)]
         (partial-api-tests)
-        (java.lang.Thread/sleep 500)
+        (wait-n-requests rtp 1)
         (partial-api-coverage-assertions rtp)))))
+
+;; TODO add full API coverage without request violation
+;; TODO add full API coverage with request violation
+;; TODO add test-report tests
