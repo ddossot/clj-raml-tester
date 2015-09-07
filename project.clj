@@ -8,7 +8,7 @@
   :java-source-paths ["java-src"]
 
   ; set to true to have verbose debug of integration tests
-  :jvm-opts ["-Dclj-raml-tester.debug=false"]
+  :jvm-opts ["-Dclj-raml-tester.debug=true"]
 
   :profiles {:dev {:plugins [[lein-kibit "0.1.2"]
                              [jonase/eastwood "0.2.1"]

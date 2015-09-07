@@ -201,7 +201,8 @@
    unused-response-codes])
 
 (defn raml-tester-results
-  "Get the currently captured tester results."
+  "Get the currently captured tester results.
+   All fields of the record are sets."
   [proxy-rec]
   {:pre [(satisfies? RamlTesterProxy proxy-rec)]
    :post [(instance? RamlTesterResults %)]}
@@ -216,6 +217,19 @@
          :unused-request-headers (set (.getUnusedRequestHeaders usage))
          :unused-response-headers (set (.getUnusedResponseHeaders usage))
          :unused-response-codes (set (.getUnusedResponseCodes usage))}))))
+
+(defn results->str
+  "Formats results as a single string."
+  [results]
+  {:pre [(instance? RamlTesterResults results)]
+   :post [(string? %)]}
+  (str/join
+    "\n"
+    (map
+      (fn -results-formatter
+        [[k v]]
+        (str (name k) ": " v))
+      results)))
 
 (defn test-report
   "TODO doc"

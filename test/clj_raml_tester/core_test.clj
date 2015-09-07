@@ -107,7 +107,8 @@
 (defn proxy-results
   [rtp]
   (let [results (raml-tester-results rtp)]
-    (log-debug results)
+    (log-debug
+      (results->str results))
     results))
 
 (defn no-api-coverage-assertions
