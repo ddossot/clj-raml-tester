@@ -5,7 +5,8 @@
             [clj-http.client :as http]
             [ring.adapter.jetty :refer [run-jetty]]
             [ring.util.response :refer [response created]]
-            [ring.middleware.json :refer [wrap-json-response]]
+            [ring.middleware.json :refer [wrap-json-body
+                                          wrap-json-response]]
             [ring.middleware.defaults :refer [wrap-defaults
                                               site-defaults]]
             [ring.middleware.conditional :refer [if-url-doesnt-start-with]]
@@ -53,7 +54,10 @@
   (GET "/fruit" []
        (response {:id 1
                   :name "banana"}))
-  (POST "/fruits" []
+  (POST "/fruits" [:as request]
+        (assert
+          (= (get-in request [:body :name])
+             "orange"))
         (created "fake-url" {:id 2
                              :name "orange"}))
   (route/not-found "Not Found"))
@@ -68,6 +72,8 @@
            site-defaults
            [:static :resources]
            "specs")))
+    (wrap-json-body
+      {:keywords? true})
     wrap-json-response))
 
 (defn with-test-api [f]
@@ -170,6 +176,43 @@
         (wait-n-requests rtp 1)
         (partial-api-coverage-assertions rtp)))))
 
-;; TODO add full API coverage without request violation
+(defn full-api-tests
+  [post-body]
+  (partial-api-tests)
+  (let [resp (http/post (test-proxy-url "/fruits")
+                        {:as :json
+                         :content-type :json
+                         :body post-body})]
+    (log-debug resp)
+    (is (= (:status resp) 201))))
+
+(defn full-api-coverage-assertions
+  [rtp expected-request-violations]
+  (let [results (proxy-results rtp)]
+    (are [coll expected] (= (count coll) expected)
+         (:unused-resources results)        0
+         (:unused-actions results)          0
+         (:unused-form-parameter results)   0
+         (:unused-query-parameters results) 0
+         (:unused-request-headers results)  0
+         (:unused-response-headers results) 0
+         (:unused-response-codes results)   0
+         (:request-violations results)      expected-request-violations
+         (:response-violations results)     0
+         (:validation-violations results)   0)))
+
+(deftest full-api-coverage-valid-requests
+  (testing "full API coverage, valid requests"
+    (testing "with RAML file"
+      (with-open [rtp (start-proxy-with-raml-file)]
+        (full-api-tests "{\"name\":\"orange\"}")
+        (wait-n-requests rtp 2)
+        (full-api-coverage-assertions rtp 0)))
+    (testing "with RAML HTTP"
+      (with-open [rtp (start-proxy-with-raml-http)]
+        (full-api-tests "{\"name\":\"orange\"}")
+        (wait-n-requests rtp 2)
+        (full-api-coverage-assertions rtp 0)))))
+
 ;; TODO add full API coverage with request violation
 ;; TODO add test-report tests
