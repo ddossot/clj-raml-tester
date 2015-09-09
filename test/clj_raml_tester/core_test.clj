@@ -55,9 +55,6 @@
        (response {:id 1
                   :name "banana"}))
   (POST "/fruits" [:as request]
-        (assert
-          (= (get-in request [:body :name])
-             "orange"))
         (created "fake-url" {:id 2
                              :name "orange"}))
   (route/not-found "Not Found"))
@@ -214,5 +211,17 @@
         (wait-n-requests rtp 2)
         (full-api-coverage-assertions rtp 0)))))
 
-;; TODO add full API coverage with request violation
+(deftest full-api-coverage-invalid-request
+  (testing "full API coverage, invalid request"
+    (testing "with RAML file"
+      (with-open [rtp (start-proxy-with-raml-file)]
+        (full-api-tests "{\"kind\":\"fruit\"}")
+        (wait-n-requests rtp 2)
+        (full-api-coverage-assertions rtp 1)))
+    (testing "with RAML HTTP"
+      (with-open [rtp (start-proxy-with-raml-http)]
+        (full-api-tests "{\"kind\":\"fruit\"}")
+        (wait-n-requests rtp 2)
+        (full-api-coverage-assertions rtp 1)))))
+
 ;; TODO add test-report tests
