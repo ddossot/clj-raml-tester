@@ -15,7 +15,7 @@
             [java.net URI URL]))
 
 (defprotocol RamlTesterProxy
-  "Defines the protocol for a RAML Tester Proxy"
+  "Defines the protocol for a RAML Tester Proxy."
   (raml-definition [this])
   (usage [this])
   (reports [this])
@@ -69,12 +69,12 @@
     (str v)))
 
 (defn- urlish?
-  [v]
+  [v file-ok?]
   (or
     (string? v)
     (instance? URI v)
     (instance? URL v)
-    (instance? File v)))
+    (and file-ok? (instance? File v))))
 
 (defn- validate-raml
   [server-options raml-definition]
@@ -104,27 +104,45 @@
         raml-violations))))
 
 (defn start-raml-tester-proxy
-  "TODO document"
-  [port target-url raml-url
-   & {:keys [base-uri ignore-x-headers]
-      :or {base-uri target-url
-           ignore-x-headers true}}]
-  {:pre [(pos? port)
-         (urlish? target-url)
-         (urlish? raml-url)
-         (urlish? base-uri)
-         (instance? Boolean ignore-x-headers)]
+  "Starts the RAML Tester Proxy, through which the API will be integration tested.
+   Required arguments:
+
+   proxy-port         - The port where the proxy will listen to.
+                        Note that the proxy binds to 'localhost'.
+   api-url            - The URL of the API where the proxied requests need to be sent to.
+                        Typically a URL like: http://localhost:port/
+                        Supported types: String, java.net.URI, java.net.URL
+   raml-url           - The URL where the RAML specification of the API can be retrieved.
+                        Supported types: String, java.net.URI, java.net.URL, java.io.File
+                        If passing as a string and the 'file' scheme is used, the URL must be absolute and start with: file:///
+
+   Supported options:
+
+   :base-uri          - In case the API base URI is different from the API URL.
+                        Supported types: String, java.net.URI, java.net.URL
+                        (defaults to api-url)
+   :ignore-x-headers? - If HTTP response headers whose names start with 'X-' need to be ignored.
+                        (defaults to true)"
+  [proxy-port api-url raml-url
+   & {:keys [base-uri ignore-x-headers?]
+      :or {base-uri api-url
+           ignore-x-headers? true}}]
+  {:pre [(pos? proxy-port)
+         (urlish? api-url false)
+         (urlish? raml-url true)
+         (urlish? base-uri false)
+         (instance? Boolean ignore-x-headers?)]
    :post [(satisfies? RamlTesterProxy %)]}
 
   (let [server-options (ServerOptions.
-                         port
-                         (urlish->str target-url)
+                         proxy-port
+                         (urlish->str api-url)
                          nil              ; mock-dir
                          (urlish->str raml-url)
                          (urlish->str base-uri)
                          nil              ; save-dir
                          nil              ; file-format
-                         ignore-x-headers
+                         ignore-x-headers?
                          false            ; async-mode
                          0                ; min-delay
                          0                ; max-delay
@@ -171,7 +189,10 @@
 (defonce ^:private request-wait-sleep-time-millis 10)
 
 (defn wait-n-requests
-  "Wait for n test requests to be captured by the proxy."
+  "Wait for n test request(s) to be captured by the proxy.
+
+   This is necessary because the proxy is asynchronous by nature,
+   thus test assertions can only be run when all expected requests have been captured."
   ([proxy-rec n]
     (wait-n-requests
       proxy-rec
@@ -201,14 +222,9 @@
    unused-response-headers
    unused-response-codes])
 
-(def empty-raml-tester-results
-  (->RamlTesterResults
-    #{} #{} #{} #{} #{}
-    #{} #{} #{} #{} #{}))
-
 (defn raml-tester-results
-  "Gets the currently captured tester results
-   and returns them as RamlTesterResults record.
+  "Gets the currently captured tester results and returns them as RamlTesterResults record.
+
    All fields of the record are sets."
   [proxy-rec]
   {:pre [(satisfies? RamlTesterProxy proxy-rec)]
