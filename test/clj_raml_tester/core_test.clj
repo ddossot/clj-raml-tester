@@ -147,7 +147,8 @@
 
 (defn partial-api-coverage-assertions
   [rtp]
-  (let [results (proxy-results rtp)]
+  (let [results (proxy-results rtp)
+        report (results->test-report results)]
     (are [coll expected] (= (count coll) expected)
          (:unused-resources results)        1
          (:unused-actions results)          1
@@ -158,7 +159,19 @@
          (:unused-response-codes results)   1
          (:request-violations results)      0
          (:response-violations results)     0
-         (:validation-violations results)   0)))
+         (:validation-violations results)   0)
+    (are [key expected] (= (get report key) expected)
+         :type     :fail
+         :expected 0
+         :actual   3
+         :message  (str
+                     "3 issues detected (ignore-request-violations? true):\n\n"
+                     " unused-resources:\n"
+                     "  /fruits\n"
+                     " unused-actions:\n"
+                     "  POST /fruits\n"
+                     " unused-response-codes:\n"
+                     "  201 in POST /fruits\n"))))
 
 (deftest partial-api-coverage
   (testing "partial API coverage"
@@ -196,7 +209,10 @@
          (:unused-response-codes results)   0
          (:request-violations results)      expected-request-violations
          (:response-violations results)     0
-         (:validation-violations results)   0)))
+         (:validation-violations results)   0)
+
+    (do-report
+      (results->test-report results))))
 
 (deftest full-api-coverage-valid-requests
   (testing "full API coverage, valid requests"
@@ -223,5 +239,3 @@
         (full-api-tests "{\"kind\":\"fruit\"}")
         (wait-n-requests rtp 2)
         (full-api-coverage-assertions rtp 1)))))
-
-;; TODO add test-report tests

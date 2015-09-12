@@ -1,4 +1,5 @@
 (ns clj-raml-tester.core
+  "A set of utilities for using RAML Tester in API integration tests."
   (:require [clojure.set :refer [union]]
             [clojure.string :as str])
   (:import   clj_raml_tester.Util
@@ -200,8 +201,14 @@
    unused-response-headers
    unused-response-codes])
 
+(def empty-raml-tester-results
+  (->RamlTesterResults
+    #{} #{} #{} #{} #{}
+    #{} #{} #{} #{} #{}))
+
 (defn raml-tester-results
-  "Get the currently captured tester results.
+  "Gets the currently captured tester results
+   and returns them as RamlTesterResults record.
    All fields of the record are sets."
   [proxy-rec]
   {:pre [(satisfies? RamlTesterProxy proxy-rec)]
@@ -225,20 +232,71 @@
    :post [(string? %)]}
   (str/join
     "\n"
-    (map
+    (reduce
       (fn -results-formatter
-        [[k v]]
-        (str (name k) ": " v))
+        [issues [k v]]
+        (if (seq v)
+          (conj issues
+                (str " " (name k) ":\n  "
+                     (str/join "\n  " v)))
+          issues))
+      []
       results)))
 
-(defn test-report
-  "TODO doc"
-  [proxy-rec
-   & {:keys [ignore-request-violations]
-      :or {ignore-request-violations true}}]
-  {:pre [(satisfies? RamlTesterProxy proxy-rec)
-         (instance? Boolean ignore-request-violations)]
+(defn count-issues
+  "Counts the total number of issues in the provided results,
+   potentially ignoring request violations."
+  [results ignore-request-violations?]
+  {:pre [(instance? RamlTesterResults results)
+         (instance? Boolean ignore-request-violations?)]
+   :post [(or (zero? %) (pos? %))]}
+  (let [results* (if ignore-request-violations?
+                   (assoc results
+                          :request-violations nil)
+                   results)]
+    (reduce
+      (fn -issue-counter
+        [total [k v]]
+        (+ total (count v)))
+     0
+     results*)))
+
+(defn- base-report-message
+  [issue-count ignore-request-violations?]
+  (str
+    issue-count
+    " issue"
+    (when (> issue-count 1) "s")
+    " detected (ignore-request-violations? "
+    ignore-request-violations? ")"
+    (if (pos? issue-count) ":" ".")))
+
+(defn results->test-report
+  "Transforms results into a map that can be used by clojure.test/do-report.
+   Supported options:
+
+   :ignore-request-violations? - should detected request violations by ignored?
+                                 (defaults to true because API integration tests
+                                 typically simulate bad client requests)"
+  [results
+   & {:keys [ignore-request-violations?]
+      :or {ignore-request-violations? true}}]
+  {:pre [(instance? RamlTesterResults results)
+         (instance? Boolean ignore-request-violations?)]
    :post [(map? %)]}
-  (let [results (raml-tester-results proxy-rec)]
-    ;; FIXME implement me!
-    nil))
+  (let [issue-count (count-issues
+                      results
+                      ignore-request-violations?)
+        brm (base-report-message
+              issue-count
+              ignore-request-violations?)
+        [report-type report-message] (if (pos? issue-count)
+                                       [:fail (str brm
+                                                   "\n\n"
+                                                   (results->str results)
+                                                   "\n")]
+                                       [:pass brm])]
+    {:type report-type
+     :message report-message
+     :expected 0
+     :actual issue-count}))
